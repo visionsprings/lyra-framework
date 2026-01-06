@@ -122,7 +122,6 @@ while True:
     if not os.path.exists(MESSAGE_PATH):
         time.sleep(1)
         continue
-
     try:
         with open(MESSAGE_PATH, "r+", encoding="utf-8") as f:
             portalocker.lock(f, portalocker.LOCK_EX | portalocker.LOCK_NB)
@@ -131,8 +130,15 @@ while True:
             if data.get("type") == "prompt" and data.get("content"):
                 logging.info("Prompt received")
                 prompt = data["content"]
-                response = run_inference(prompt)
 
+                # Build the full rich prompt with identity, history, etc.
+                from prompt_builder import build_full_prompt
+                rich_prompt = build_full_prompt(prompt)
+
+                # Single inference using the complete prompt
+                response = run_inference(rich_prompt)
+
+                # Write reply back
                 f.seek(0)
                 f.truncate()
                 json.dump({"type": "reply", "content": response}, f, indent=2)

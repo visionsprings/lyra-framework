@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lyra DB Manager</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: system-ui, sans-serif; background: #f8f9fa; margin: 40px; line-height: 1.6; }
+    h1, h2 { color: #222; }
+    a.back { display: inline-block; margin-bottom: 20px; color: #007bff; text-decoration: none; }
+    a.back:hover { text-decoration: underline; }
+    table { width: 100%; border-collapse: collapse; margin: 20px 0; background: white; }
+    th, td { padding: 12px; border: 1px solid #ddd; text-align: left; vertical-align: top; }
+    th { background: #f0f0f0; }
+    tr:nth-child(even) { background: #f9f9f9; }
+    .delete-btn { background: #dc3545; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; }
+    .delete-btn:hover { background: #c82333; }
+    .table-list { margin-bottom: 40px; }
+    .table-name { font-size: 1.4em; margin: 30px 0 10px; color: #007bff; }
+    pre { background: #f1f1f1; padding: 10px; border-radius: 6px; overflow-x: auto; }
+    td pre { white-space: pre-wrap; word-wrap: break-word; max-width: 400px; margin: 0; font-size: 0.9em; }
+</style>
+</head>
+<body>
+  <a class="back" href="/">← Back to Chat</a>
+  <h1>Lyra Database Manager</h1>
+  <p><strong>Database:</strong> lyra.db</p>
+
+    {% for table_name, table_data in tables.items() %}
+    <div class="table-list">
+        <h2 class="table-name">{{ table_name }} ({{ table_data.rows|length }} rows)</h2>
+        {% if table_data.rows %}
+        <table>
+            <thead>
+            <tr>
+                {% for col in table_data.columns %}
+                <th>{{ col }}</th>
+                {% endfor %}
+                <th>Actions</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for row in table_data.rows %}
+                <tr>
+                {% for col in table_data.columns %}
+                    <td><pre>{{ row[col]|string|truncate(200) }}</pre></td>
+                {% endfor %}
+                <td>
+                <form method="POST" action="/db-delete" style="display:inline;">
+                    <input type="hidden" name="table" value="{{ table_name }}">
+                    <input type="hidden" name="id" value="{{ row.rowid or row.id or row[table_data.columns[0]] }}">
+                    <button type="submit" class="delete-btn" onclick="return confirm('Delete this row?')">Delete</button>
+                </form>
+                </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p><em>No rows in this table.</em></p>
+        {% endif %}
+    </div>
+    {% endfor %}
+
+  <script>
+    // Auto-refresh every 30 seconds
+    setTimeout(() => location.reload(), 30000);
+  </script>
+</body>
+</html>

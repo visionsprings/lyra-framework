@@ -1,0 +1,8 @@
+flask
+portalocker
+torch
+transformers
+bitsandbytes
+accelerate
+fastapi
+uvicorn[standard]
