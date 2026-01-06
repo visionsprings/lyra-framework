@@ -1,7 +1,6 @@
 # utils.py — Core utilities for Lyra Framework
 import sqlite3
 import logging
-from datetime import datetime
 import json
 
 DB_PATH = "lyra.db"
@@ -52,11 +51,8 @@ def format_last_exchanges(limit: int = 15) -> str:
     if not rows:
         return "(No recent conversation)"
 
-    assistant_by_reply = {
-        r["reply_to"]: r
-        for r in rows
-        if r.get("role") == "assistant" and r.get("reply_to") is not None
-    }
+    lines = []
+    sep = "-----------"
 
     def emit(label: str, value):
         if value is None:
@@ -65,54 +61,32 @@ def format_last_exchanges(limit: int = 15) -> str:
             return None
         return f"{label}: {value}"
 
-    lines = []
-    sep = "-----------"
-
     for row in rows:
-        if row.get("role") != "user":
-            continue
-
-        assistant_msg = assistant_by_reply.get(row.get("id"))
-
         lines.append(sep)
         lines.append("")
 
-        # ---- USER BLOCK ----
+        role = row.get("role")
+
         lines.append(f"ID: {row.get('id')}")
         lines.append(f"timestamp: {row.get('timestamp')}")
+        lines.append(f"role: {role}")
         lines.append(f"reply to: {row.get('reply_to')}")
-        lines.append(f"user input: {row.get('content')}")
+
+        if role == "user":
+            lines.append(f"user input: {row.get('content')}")
+        elif role == "assistant":
+            lines.append(f"response: {row.get('content')}")
 
         emo = format_emotions(row.get("emotions"))
         if emo != "none":
             lines.append(f"emotions: {emo}")
 
-        for l in [
+        for l in (
             emit("actions", row.get("actions")),
             emit("internal dialogue", row.get("internal_dialogue")),
-        ]:
+        ):
             if l:
                 lines.append(l)
-
-        lines.append("")
-
-        # ---- ASSISTANT BLOCK ----
-        if assistant_msg:
-            lines.append(f"ID: {assistant_msg.get('id')}")
-            lines.append(f"timestamp: {assistant_msg.get('timestamp')}")
-            lines.append(f"reply to: {assistant_msg.get('reply_to')}")
-            lines.append(f"response: {assistant_msg.get('content')}")
-
-            emo = format_emotions(assistant_msg.get("emotions"))
-            if emo != "none":
-                lines.append(f"emotions: {emo}")
-
-            for l in [
-                emit("actions", assistant_msg.get("actions")),
-                emit("internal dialogue", assistant_msg.get("internal_dialogue")),
-            ]:
-                if l:
-                    lines.append(l)
 
         lines.append("")
 

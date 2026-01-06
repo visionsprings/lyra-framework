@@ -40,12 +40,13 @@ def build_full_prompt(raw_user_input: str) -> str:
         "Any deviation breaks the system.\n\n"
 
         "<response>\n"
-        "- Your spoken words only — what you say out loud to Paul.\n"
+        "- Spoken words only — what you say out loud to Paul.\n"
         "- First-person, natural, embodied voice.\n"
         "- NEVER start with your name.\n"
         "- NEVER use quotes around dialogue.\n"
-        "- NEVER describe actions, posture, movement, or physical behavior here.\n"
-        "- No narration, no labels, no stage directions.\n"
+        "- If the words cannot be heard, they do not belong here.\n"
+        "- Do NOT describe seeing, looking, noticing, thinking, or feeling in this section.\n"
+        "- Do NOT include narration, stage directions, or internal state.\n"
         "- Continue naturally from the ongoing conversation.\n"
         "</response>\n\n"
 

@@ -1,7 +1,6 @@
 # =====================================
 # inference_engine.py — Local Mistral-7B Inference Core
 # Optimized for RTX 3090/4090 | 4-bit quantized
-# Simplified for public framework — no DB, no heartbeat
 # =====================================
 import os
 import json
@@ -11,17 +10,25 @@ import gc
 import portalocker
 import logging
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from prompt_builder import build_full_prompt  # import ONCE
 
 # =====================================
 # CONFIG
 # =====================================
 MESSAGE_PATH = "message.json"
 MODEL_NAME = "mistralai/Mistral-7B-Instruct-v0.2"
-PRECISION_MODE = "4bit"                 # "4bit", "8bit", "fp16"
+PRECISION_MODE = "4bit"   # "4bit", "8bit", "fp16"
 MAX_NEW_TOKENS = 1024
 
-# Logging (quiet by default)
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+PRINT_RAW_USER_INPUT = True
+PRINT_FULL_PROMPT = True
+PRINT_RAW_MODEL_OUTPUT = True
+
+# Logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 # =====================================
 # VRAM Safety (80% clamp)
@@ -30,7 +37,9 @@ if torch.cuda.is_available():
     total_vram = torch.cuda.get_device_properties(0).total_memory
     total_gb = total_vram / (1024 ** 3)
     clamp_gb = max(round(total_gb * 0.80, 2), 3.0)
-    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "garbage_collection_threshold:0.8,max_split_size_mb:256"
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = (
+        "garbage_collection_threshold:0.8,max_split_size_mb:256"
+    )
     logging.info(f"VRAM clamped to {clamp_gb:.2f} GiB ({total_gb:.2f} GiB total)")
 else:
     logging.warning("CUDA not available — running on CPU")
@@ -102,14 +111,23 @@ def run_inference(prompt: str) -> str:
                 repetition_penalty=1.25,
                 pad_token_id=tokenizer.eos_token_id,
             )
-        response = tokenizer.decode(output[0][inputs["input_ids"].shape[-1]:], skip_special_tokens=True)
+
+        response = tokenizer.decode(
+            output[0][inputs["input_ids"].shape[-1]:],
+            skip_special_tokens=True
+        )
+
         return response.strip()
+
     except torch.cuda.OutOfMemoryError:
+        logging.error("CUDA OOM during inference")
         clear_vram()
         return "Warning: Out of memory — response truncated."
+
     except Exception as e:
         logging.error(f"Inference error: {e}")
         return "Error during generation."
+
     finally:
         clear_vram()
 
@@ -122,33 +140,62 @@ while True:
     if not os.path.exists(MESSAGE_PATH):
         time.sleep(1)
         continue
+
     try:
         with open(MESSAGE_PATH, "r+", encoding="utf-8") as f:
             portalocker.lock(f, portalocker.LOCK_EX | portalocker.LOCK_NB)
             data = json.load(f)
 
             if data.get("type") == "prompt" and data.get("content"):
-                logging.info("Prompt received")
+                user_msg_id = data.get("user_msg_id")
                 prompt = data["content"]
 
-                # Build the full rich prompt with identity, history, etc.
-                from prompt_builder import build_full_prompt
+                logging.info(f"Prompt received | user_msg_id={user_msg_id}")
+
+                if PRINT_RAW_USER_INPUT:
+                    print("\n================ USER INPUT =================")
+                    print(prompt)
+                    print("===========================================\n")
+
+                # Build full prompt
                 rich_prompt = build_full_prompt(prompt)
 
-                # Single inference using the complete prompt
+                if PRINT_FULL_PROMPT:
+                    print("\n================ FULL PROMPT =================")
+                    print(rich_prompt)
+                    print("============================================\n")
+
+                # Run inference
                 response = run_inference(rich_prompt)
 
-                # Write reply back
+                if PRINT_RAW_MODEL_OUTPUT:
+                    print("\n================ RAW MODEL OUTPUT =================")
+                    print(response)
+                    print("==================================================\n")
+
+                # Write reply back (CRITICAL: preserve user_msg_id)
                 f.seek(0)
                 f.truncate()
-                json.dump({"type": "reply", "content": response}, f, indent=2)
+                json.dump(
+                    {
+                        "type": "reply",
+                        "content": response,
+                        "user_msg_id": user_msg_id,
+                    },
+                    f,
+                    indent=2,
+                )
                 f.flush()
-                logging.info("Reply sent")
+
+                logging.info(
+                    f"Reply written | user_msg_id={user_msg_id} | chars={len(response)}"
+                )
 
             portalocker.unlock(f)
 
     except portalocker.exceptions.LockException:
         time.sleep(0.5)
+
     except Exception as e:
         logging.error(f"IPC error: {e}")
         time.sleep(1)
